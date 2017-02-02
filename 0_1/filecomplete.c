@@ -11,11 +11,10 @@ int main() {
 	printf("%s", folder_name);
 	DIR *dir;
 	struct dirent *files;
-	if ((dir = opendir(folder_name)) != NULL) {
-  	while ((files = readdir (dir)) != NULL) { // print each file in directory
+	if ((dir = opendir(folder_name)) != NULL) { // if pointer to directory exists
+  	while ((files = readdir (dir)) != NULL) { // print each file in directory while pointer exists to file
     		printf("%s\n", files->d_name);
-  		}
-  		closedir (dir);
+  		} closedir(dir);
 		} else { // problem opening directory
   		perror("");
 	  	return EXIT_FAILURE;
