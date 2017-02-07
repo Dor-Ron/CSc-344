@@ -2,8 +2,14 @@
 #include <dirent.h> // necessary for directory analysis
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <stdbool.h>
+
+/* Return index by subtracting ASCII value of first char in d_name string */
+int letterIndex(const char *file) {
+  return ((int)toupper(file[0])) - 65;
+}
 
 /* Check if string starts with substring */
 bool contains(const char *a, const char *b) {
@@ -27,15 +33,12 @@ int main() {
   if ((dir = opendir(folderName)) != NULL) {     // if pointer to directory exists
     while ((files = readdir (dir)) != NULL) {    // if there are still files to go through in directory
       if (contains(files->d_name, fileStart)) {  // if files start with substring
-        fileArray[idx] = files->d_name;        // add file to array
+        fileArray[idx] = files->d_name;          // add file to array
         idx++;
       }
     }
     closedir(dir);
     for (int i = 0; i < idx; i++) printf("%s\n", fileArray[i]);
-  } else { // problem opening directory
-      perror("");
-      return EXIT_FAILURE;
-  }
+  } else perror("No such directory exists, please enter a valid path:\n"); // problem opening directory
   return 0;
 }
