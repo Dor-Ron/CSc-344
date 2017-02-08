@@ -15,17 +15,19 @@ struct node {
    struct node *next;
 };
 
+
 /* Add nodes to linked list */
 void addNode(char *data, struct node *head, struct node *current) {
    struct node *newNode = (struct node*) malloc(sizeof(struct node));
    newNode->data = data;
    newNode->next = NULL;
-   if (head == NULL) { // first node
-     head = newNode; // make head the new node
-     printf("hmmm\n]\n");
-     current = head; // make curIdx == head
+   if (head == NULL) {   // first link
+     head = current = newNode;
+     // if (head == NULL) printf("Epic fail....\n");
+   } else {    // any other link
+     current->next = newNode;
+     current = newNode;
    }
-   current->next = newNode;  // else just add new node to current list after curIdx
 }
 
 /* traverse linked list and print the corresponding file names */
@@ -50,9 +52,7 @@ void makeLetterArray(struct node *arr[26]) {
 }
 
 /* reset data for when user enters new directory */
-void resetData(struct node *head_ptr, struct node *cur_ptr, struct node *arr[26]) {
-  head_ptr = NULL;
-  cur_ptr = NULL;
+void resetData(struct node *arr[26]) {
   clearArray(arr);
   makeLetterArray(arr);
 }
@@ -73,35 +73,35 @@ bool contains(const char *a, const char *b) {
 }
 
 int main() {
-  struct node *head = NULL;
-  struct node *curIdx = NULL;
   struct node *linkedListArray[26];
   char folderName[100];
   char fileStart[100];
   bool end = false;
   int letterIdx = 0;
   while (!end) {
-    resetData(head, curIdx, linkedListArray);
+    resetData(linkedListArray);
     printf("Enter a folder name: \t");
     scanf("%[^\n]s", folderName);
     fseek(stdin, 0, SEEK_END);
     printf("Enter the beginning of a filename: ");
     scanf("%[^\n]s", fileStart);
     fseek(stdin, 0, SEEK_END);
+    struct node *head = linkedListArray[letterIdx];
+    struct node *curIdx = head;
     DIR *dir;
     struct dirent *files;
     letterIdx = letterIndex(folderName);
-    head = linkedListArray[letterIdx];
-    curIdx = head;
     if ((dir = opendir(folderName)) != NULL) {     // if pointer to directory exists
       while ((files = readdir (dir)) != NULL) {    // if there are still files to go through in directory
         if (contains(files->d_name, fileStart)) {  // if files start with substring
+          printf("%s\n", "\n***file found***\n");
           addNode(files->d_name, head, curIdx);
-          if (head == NULL) printf("orale wey\n\n\n");
+          if (head == NULL) printf("WHY IS IT STILL NULL...\n");
         }
       }
       closedir(dir);
-      for (struct node *i = linkedListArray[letterIdx]; i != NULL ; i = i->next) printf("%suytre\n", i->data);
+      if (head == NULL) printf("%s\n", "\n***why tho :/***\n");
+      for (struct node *i = head; i != NULL ; i = i->next) printf("%s\n", i->data);
     } else perror("No such directory exists, please enter a valid path:\n"); // problem opening directory
   }
   return 0;
