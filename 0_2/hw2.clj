@@ -3,6 +3,9 @@
 
 (ns hw2)
 
+; Supplied to us by Prof. Schlegel
+(defn notexp [e1] (list 'not e1))
+
 ;Redefined orexp and andexp to take variable # of parameters
 (defn orexp [& args]
   (reduce
