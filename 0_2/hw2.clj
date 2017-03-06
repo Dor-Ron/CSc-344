@@ -34,3 +34,9 @@
     '(and x y z) '(and x (and y z)),
     '(not (and x y)) '(or (not x) (not y)),
     '(not (or x y)) '(and (not x) (not y))))
+
+;;Not completly sure if this is close to correct.
+(defn evalexp 
+   (reduce [evalexp] simplify [e1][e2]
+   (reduce concat [booLExpMap] (simplify (bind-values blinding exp)))
+   ))
