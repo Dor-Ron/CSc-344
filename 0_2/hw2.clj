@@ -3,9 +3,6 @@
 
 (ns hw2)
 
-; Supplied to us by Prof. Schlegel
-(defn notexp [e1] (list 'not e1))
-
 ;Redefined orexp and andexp to take variable # of parameters
 (defn orexp [& args]
   (reduce
@@ -17,8 +14,14 @@
     (fn [e1 e2]
       (list 'and e1 e2)) args))
 
+;Redefined not exp
+(defn notexp [& args]
+  (reduce 
+   (fn [e1 e2]
+    (list not e1 or e2)) args ))
+  
 ;Boolean Algebra Simplication HashMap.class Supplied
-(def boolExpMap
+  (def boolExpMap
   (hash-map '(or true) true,
     '(or false) false,
     '(and true) true,
@@ -32,14 +35,13 @@
     '(and x true) 'x,
     '(and true x) 'x,
     '(not false) true,
+      **--
     '(not true) false,
     '(or x y z) '(or x (or y z)),
     '(and x y z) '(and x (and y z)),
     '(not (and x y)) '(or (not x) (not y)),
-    '(not (or x y)) '(and (not x) (not y))))
+    '(not (or x y)) '(and (not x) (not y)))),
 
-;;Not completly sure if this is close to correct.
-(defn evalexp 
-   (reduce [evalexp] simplify [e1][e2]
-   (reduce concat [booLExpMap] (simplify (bind-values blinding exp)))
-   ))
+   ;; I tried doing the evalexp but i cant seem to get anywhere with it 
+   (defn evalexp 
+     (stringmap "["e1" orexp, "e2" andexp]" (simplify (bind-values bindings exp)))
