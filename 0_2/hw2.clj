@@ -54,3 +54,6 @@
         (and (and (and (and (= op 'or) (= (count (first args)) 2) (= (second (first args)) true) (= (first (first args)) false))))) true              ;(and false true)
         :else lst
     )))
+
+; need to write this one...
+(defn simplify [])
