@@ -68,4 +68,5 @@
  ;;out of bound exception
       (nth []0  "nothing herer")
       (nth [Evalexp])
+      (nth (["last"] -1  ("true or false depending on the variable intake")))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
