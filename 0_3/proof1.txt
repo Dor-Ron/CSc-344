@@ -1,0 +1,12 @@
+1 (->I (if (if A (if B C)) (if (if A B) (if A C)))
+    (proof
+    2 (hyp (if A (if B C)))
+    3 (->I (if (if A B) (if A C))
+        (proof
+        4 (hyp (if A B))
+        5 (->I (if A C)
+            (proof
+            6 (hyp A)
+            7 (->E B 4 6)
+            8 (->E (if B C) 2 6)
+            9 (->E C 8 7)))))))

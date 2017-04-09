@@ -1,0 +1,12 @@
+1 (->I (if (and B C) (and (if A B) (if A C)))
+     (proof
+     2 (hyp (and B C))
+     3 (->I (if A B)
+          (proof
+          4 (hyp A)
+          5 (&E B 2)))
+     6 (->I (if A C)
+          (proof
+          7 (hyp A)
+          8 (&E C 2)))
+     9 (&I (and (if A B) (if A C)) 3 6)))
