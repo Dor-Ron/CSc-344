@@ -11,173 +11,223 @@ Institution: SUNY Oswego
 
 -- Imports
 -- Note: will need to install parsec through cabal
-import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Char
+import Data.Maybe
 import System.IO
-import Data.Char
+import Control.Exception hiding (try)  -- Will give a namespace error w/o the hide
+import Text.ParserCombinators.Parsec
 
+data ExprTree = Constant { val :: String }
+              | Num   { num :: Int }
+              | Proof { line :: Int, operator :: String, sub :: ExprTree }
+              | Subproof  { operator   :: String, line  :: Int, arg1 :: ExprTree, arg2 :: ExprTree, arg3 :: [ExprTree] }
+              | DerivLine  { line :: Int, operator  :: String, rule :: ExprTree }
+              | Hypothesis   { line :: Int, operator  :: String, rule :: ExprTree }
+              | CondIntro  { operator  :: String, rule :: ExprTree }
+              | ConjIntroCondElim  { operator  :: String, rule :: ExprTree, line1 :: Int, line2 :: Int }
+              | ConjElim  { operator  :: String, rule :: ExprTree, line :: Int }
+              | Expr  { operator  :: String, arg1 :: ExprTree, arg2 :: ExprTree } deriving (Show, Eq)
 
--- Custom data type provided by Professor Schlegel
-data ExprTree = Proof { line :: ExprTree, subpr :: ExprTree}
-              | Subproof { sub_rule :: ExprTree, hypo :: ExprTree, derivations :: [ExprTree]}
-              | DerivLine { line :: ExprTree, inner :: ExprTree}
-              | Hyp { line :: ExprTree, ante :: ExprTree }
-              | DisRule { d_rule :: ExprTree }
-              | NonDisRule { d_rule :: ExprTree }
-              | CondIntro { rule :: [Char], prop :: ExprTree }
-              | CondElim { rule :: [Char], prop :: ExprTree, c_arg1 :: ExprTree, c_arg2 :: ExprTree }
-              | ConjIntro { rule :: [Char], exp :: ExprTree,  c_arg1 :: ExprTree, c_arg2 :: ExprTree }
-              | ConjElim { rule :: [Char], exp :: ExprTree, arg :: ExprTree }
-              | Expr { val :: ExprTree }
-              | CondExpr { op :: [Char], arg1 :: ExprTree, arg2 :: ExprTree }
-              | ConjExpr { op :: [Char], arg1 :: ExprTree, arg2 :: ExprTree }
-              | Const { value :: [Char] }
-              | Number { value :: [Char] } deriving(Show, Eq)
+proofexpr :: GenParser Char st ExprTree
+proofexpr = do
+    num <- numberexpr
+    space
+    char '('
+    expression <- subproofexpr
+    return (Proof num "proof" expression)
 
+subproofexpr :: GenParser Char st ExprTree
+subproofexpr = do
+    arg1 <- dischargeExpr
+    spaces
+    char '('
+    string "proof"
+    arg2 <- hypothesisexpr
+    arg3 <- (many derivationexpr)
+    char ')'
+    char ')'
+    return (Subproof "sub" (-1) arg1 arg2 arg3)
 
--- parses for <const-expr>
+derivationexpr :: GenParser Char st ExprTree
+derivationexpr = do
+    spaces
+    num <- numberexpr
+    space
+    char '('
+    exp <- try subproofexpr <|> try nondischargeExpr
+    return (DerivLine num "derv" exp)
+
+hypothesisexpr :: GenParser Char st ExprTree
+hypothesisexpr = do
+    spaces  -- includes newline
+    num <- numberexpr
+    space
+    char '('
+    string "hyp"
+    space
+    arg <- expr
+    char ')'
+    return (Hypothesis num "hyp" arg)
+
+dischargeExpr :: GenParser Char st ExprTree
+dischargeExpr = try conditionalIntroExpr
+
+nondischargeExpr :: GenParser Char st ExprTree
+nondischargeExpr = try conjIntroExpr <|> try conjElimExpr <|> try conditionalElimExpr
+
+conditionalIntroExpr :: GenParser Char st ExprTree
+conditionalIntroExpr = do
+    string "->I"
+    space
+    exp <- implicationExpr
+    return (CondIntro "->I" exp)
+
+conditionalElimExpr :: GenParser Char st ExprTree
+conditionalElimExpr = do
+    string "->E"
+    space
+    arg1 <- expr
+    space
+    arg2 <- numberexpr
+    space
+    arg3 <- numberexpr
+    char ')'
+    return (ConjIntroCondElim "->E" arg1 arg2 arg3)
+
+conjIntroExpr :: GenParser Char st ExprTree
+conjIntroExpr = do
+    string "&I"
+    space
+    arg1 <- conjExpr
+    space
+    arg2 <- numberexpr
+    space
+    arg3 <- numberexpr
+    char ')'
+    return (ConjIntroCondElim "&I" arg1 arg2 arg3)
+
+conjElimExpr :: GenParser Char st ExprTree
+conjElimExpr = do
+    string "&E"
+    space
+    ant <- expr
+    space
+    cq <- numberexpr
+    char ')'
+    return (ConjElim "&E" ant cq)
+
+expr :: GenParser Char st ExprTree
+expr = try implicationExpr <|> try conjExpr <|> try constexpr
+
+implicationExpr :: GenParser Char st ExprTree
+implicationExpr = do
+    char '('
+    string "if"
+    space
+    ant <- expr
+    space
+    cq <- expr
+    char ')'
+    return (Expr "if" ant cq)
+
+conjExpr :: GenParser Char st ExprTree
+conjExpr = do
+    char '('
+    string "and"
+    space
+    ant <- expr
+    space
+    cq <- expr
+    char ')'
+    return (Expr "and" ant cq)
+
 constexpr :: GenParser Char st ExprTree
 constexpr = do
     exp <- many1 upper
-    return (Const exp)
+    return (Constant exp)
 
--- parses for <number>
-numexpr :: GenParser Char st ExprTree
-numexpr = do
-    exp <- many1 digit
-    return (Number exp)
+numberexpr :: GenParser Char st Int
+numberexpr = do
+    num <- read <$> many1 digit
+    return (num)
 
--- parses for <conjunction-expr>
-conjexpr :: GenParser Char st ExprTree
-conjexpr = do
-  char '('
-  op <- string "and"
-  space
-  exp1 <- exprexpr
-  space
-  exp2 <-  exprexpr
-  char ')'
-  return (ConjExpr op exp1 exp2)
+-- Take rule and # returns the rule at the corresponding to the rule the number references
+findRule :: ExprTree -> Int -> Maybe ExprTree
+findRule tree n =
+    if (line tree) == n then Just (rule tree)
+        else if (operator tree) == "proof" then findRule (sub tree) n
+            else if (operator tree) == "sub" && (line (arg2 tree)) == n then Just (arg2 tree)  -- type == Expr
+                else if (operator tree) == "sub" then findRule2 (arg3 tree) n  -- type = (arg3 subproof) == derivation lines
+                    else Nothing
 
--- parses for <conditional-expr>
-condexpr :: GenParser Char st ExprTree
-condexpr = do
-  char '('
-  op <- string "if"
-  space
-  exp1 <- exprexpr
-  space
-  exp2 <- exprexpr
-  char ')'
-  return (CondExpr op exp1 exp2)
+-- For arg3 of subproof, derivationlines by BNF, recursively gets corresponding rule
+findRule2 :: [ExprTree] -> Int -> Maybe ExprTree
+findRule2 trees n =
+    if (line (take 1 trees !! 0)) == n then Just (rule (take 1 trees !! 0))
+        else if (operator (take 1 trees !! 0)) == "derv" && (operator (rule (take 1 trees !! 0))) == "sub" then
+            case findRule (rule (take 1 trees !! 0)) n of
+                Nothing -> findRule2 (tail trees) n
+                Just trees -> Just trees
+            else if length trees > 1 then findRule2 (tail trees) n
+                else Nothing
 
--- parse for <expr>
-exprexpr :: GenParser Char st ExprTree
-exprexpr = do
-  val <- try condexpr <|> try conjexpr <|> try constexpr
-  return (Expr val)
+-- if theres a nested proof recursively simplify else map theorems get true/false
+implicationIntro :: ExprTree -> ExprTree -> Bool
+implicationIntro ant cq = (arg1 (rule (arg1 cq))) == (rule (arg2 cq)) &&
+            if (operator (rule (take 1 (arg3 cq) !! 0))) == "sub" &&
+                (rule (arg1 (rule (take 1 (arg3 cq) !! 0)))) == (arg2 (rule (arg1 cq)))
+                then implicationIntro ant (rule (take 1 (arg3 cq) !! 0))
+                else theoremMapper (arg3 cq) ant
 
--- parses for <conjunction-elim-rule>
-conjelimexpr :: GenParser Char st ExprTree
-conjelimexpr = do
-  rule <- string "&E"
-  space
-  arg1 <- exprexpr
-  space
-  arg2 <- numexpr
-  return (ConjElim rule arg1 arg2)
+-- If x and y and x then y
+implicationElim :: ExprTree -> ExprTree -> Bool
+implicationElim expresion theorem =
+    case findRule expresion (line1 theorem) of
+        Nothing -> False
+        Just x -> case findRule expresion (line2 theorem) of
+            Nothing -> False
+            Just y -> "if" == (operator $ rule x) && (arg1 $ rule x) == (rule y) && (rule theorem) == (arg2 $ rule x)
 
--- parses for <conjunction-intro-rule>
-conjintroexpr :: GenParser Char st ExprTree
-conjintroexpr = do
-  rule <- string "&I"
-  space
-  arg1 <- conjexpr
-  space
-  arg2 <- numexpr
-  space
-  arg3 <- numexpr
-  return (ConjIntro rule arg1 arg2 arg3)
+-- p ^ q ^ (q or p)
+conjunctionElim :: ExprTree -> ExprTree -> Bool
+conjunctionElim half1 half2 =
+    case findRule half1 (line half2) of
+        Nothing -> False
+        Just x -> (operator $ rule x) == "and" && ((arg1 $ rule x) == (rule half2) || (arg2 $ rule x) == (rule half2))
 
--- parses for <conditional-elim-rule>
-condelimexpr :: GenParser Char st ExprTree
-condelimexpr = do
-  rule <- string "->E"
-  space
-  arg1 <- exprexpr
-  space
-  arg2 <- numexpr
-  space
-  arg3 <- numexpr
-  return (CondElim rule arg1 arg2 arg3)
+-- p ^ q then (p ^ q)
+conjunctionIntro :: ExprTree -> ExprTree -> Bool
+conjunctionIntro expresion j =
+    case findRule expresion (line1 j) of
+        Nothing -> False
+        Just x -> case findRule expresion (line2 j) of
+            Nothing -> False
+            Just y -> if (operator x) == "sub"
+            then (arg1 $ rule j) == (rule $ arg1 x) && (arg2 $ rule j) == (rule $ arg1 y)
+            else (arg1 $ rule j) == (rule x) && (arg2 $ rule j) == (rule y)
 
--- parses for <conditional-intro-rule>
-condintroexpr :: GenParser Char st ExprTree
-condintroexpr = do
-  rule <- string "->I"
-  space
-  arg <- condexpr
-  return (CondIntro rule arg)
 
--- parses for <non-discharge-rule>
-nondisexpr :: GenParser Char st ExprTree
-nondisexpr = do
-  char '('
-  rule <- try conjintroexpr <|> try condelimexpr <|> try conjelimexpr
-  char ')'
-  return (NonDisRule rule)
+-- Uses correct rulee validator per deriv in derivation lines
+theoremMapper :: [ExprTree] -> ExprTree -> Bool
+theoremMapper derivations prevNode = (all (== True) (map (\x -> if
+                                (operator $ rule x) == "&E"
+                                then conjunctionElim prevNode (rule x) else if
+                                (operator $ rule x) == "->E"
+                                then implicationElim prevNode (rule x) else if
+                                (operator $ rule x) == "&I"
+                                then conjunctionIntro prevNode (rule x) else if
+                                (operator $ rule x) == "sub"
+                                then implicationIntro prevNode (rule x) else False) derivations))
 
--- parses for <non-discharge-rule>
-disexpr :: GenParser Char st ExprTree
-disexpr = do
-  arg <- condintroexpr
-  return (DisRule arg)
-
--- parses for <hypothesis>
-hypexpr :: GenParser Char st ExprTree
-hypexpr = do
-  spaces --newline
-  arg1 <- numexpr
-  space
-  char '('
-  string "hyp"
-  space
-  arg2 <- exprexpr
-  char ')'
-  return (Hyp arg1 arg2)
-
--- parses for <subproof>
-subexpr :: GenParser Char st ExprTree
-subexpr = do
-  char '('
-  arg1 <- disexpr
-  spaces --newline
-  char '('
-  string "proof"
-  arg2 <- hypexpr
-  arg3 <- many1 derivexpr
-  char ')'
-  char ')'
-  return (Subproof arg1 arg2 arg3)
-
--- parses for <derivation-line>
-derivexpr :: GenParser Char st ExprTree
-derivexpr = do
-  spaces --newline
-  arg1 <- numexpr
-  space
-  arg2 <- try subexpr <|> try nondisexpr
-  return (DerivLine arg1 arg2)
-
--- parse for <proof>
-proofexpr :: GenParser Char st ExprTree
-proofexpr = do
-  arg1 <- numexpr
-  space
-  arg2 <- subexpr
-  return (Proof arg1 arg2)
+proofValidator :: ExprTree -> Bool
+proofValidator proof = implicationIntro proof (sub proof)
 
 main :: IO ()
 main = do
-  contents <- readFile "proof1.txt"
-  print (parse proofexpr "" contents)
+    file <- readFile "proof2.txt"
+    case (parse proofexpr "" file) of
+        Left e -> do
+                    print "Couldn't parse given file"
+                    print e
+        Right r -> do
+                    print (proofValidator r) `catch` \(SomeException _) -> putStrLn ("Invalid Proof")
